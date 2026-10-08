@@ -65,12 +65,12 @@ describe.each(STAGE_NAMES)('the stack of the stage %s', (stage) => {
     }
   });
 
-  it('keeps the flag show-discounts off', () => {
+  it('turns the flag show-discounts on', () => {
     const [hosted] = Object.values(template.findResources('AWS::AppConfig::HostedConfigurationVersion')) as {
       Properties: { Content: string };
     }[];
     const content = JSON.parse(hosted?.Properties.Content ?? '') as { values: Record<string, { enabled: boolean }> };
-    expect(content.values['show-discounts']?.enabled).toBe(false);
+    expect(content.values['show-discounts']?.enabled).toBe(true);
   });
 
   it('deploys the hosted version with the strategy of the stage', () => {
@@ -107,8 +107,8 @@ describe.each(STAGE_NAMES)('the stack of the stage %s', (stage) => {
     }
   });
 
-  it('keeps the state of show-discounts off', () => {
-    template.hasResourceProperties('AWS::SSM::Parameter', { Name: '/lab/flags/state/show-discounts', Value: 'off' });
+  it('writes the state of show-discounts as on', () => {
+    template.hasResourceProperties('AWS::SSM::Parameter', { Name: '/lab/flags/state/show-discounts', Value: 'on' });
   });
 
   it('writes the state only after the deployment is complete, like the version', () => {
@@ -194,12 +194,16 @@ describe('the stages together', () => {
 });
 
 describe('a change of the flags', () => {
+  // A fixed flag set. These tests change a value of this set, not a value of the real flag file.
+  const BASE: FlagSet = {
+    'show-discounts': { ...FLAGS['show-discounts'], values: { test: false, staging: false, production: false } },
+  };
   const CHANGED: FlagSet = {
     'show-discounts': { ...FLAGS['show-discounts'], values: { test: true, staging: false, production: false } },
   };
 
   it('changes the hosted content, so CloudFormation makes a new hosted version and a new deployment', () => {
-    const before = JSON.stringify(templateFor('Test').findResources('AWS::AppConfig::HostedConfigurationVersion'));
+    const before = JSON.stringify(templateFor('Test', BASE).findResources('AWS::AppConfig::HostedConfigurationVersion'));
     const after = JSON.stringify(templateFor('Test', CHANGED).findResources('AWS::AppConfig::HostedConfigurationVersion'));
     expect(after).not.toBe(before);
   });
@@ -207,8 +211,8 @@ describe('a change of the flags', () => {
   it('changes the content of one stage only, when the flag file changes the value of that stage', () => {
     const content = (template: Template): string =>
       JSON.stringify(template.findResources('AWS::AppConfig::HostedConfigurationVersion'));
-    expect(content(templateFor('Staging', CHANGED))).toBe(content(templateFor('Staging')));
-    expect(content(templateFor('Production', CHANGED))).toBe(content(templateFor('Production')));
+    expect(content(templateFor('Staging', CHANGED))).toBe(content(templateFor('Staging', BASE)));
+    expect(content(templateFor('Production', CHANGED))).toBe(content(templateFor('Production', BASE)));
   });
 
   it('does not change the hosted content when only the version of the release changes', () => {
@@ -231,7 +235,7 @@ describe('a change of the flags', () => {
 
   it('writes one state parameter for each flag of another flag set', () => {
     const TWO: FlagSet = {
-      ...FLAGS,
+      ...BASE,
       'second-flag': { ...FLAGS['show-discounts'], values: { test: true, staging: true, production: false } },
     };
     const names = (stage: StageName): Record<string, string> =>

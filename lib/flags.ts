@@ -8,6 +8,6 @@ export const FLAGS = {
     description: 'The catalogue adds an optional discount to each product, and the web page shows it.',
     owner: 'jross24',
     removeBy: '2027-01-08',
-    values: { test: false, staging: false, production: false },
+    values: { test: true, staging: true, production: true },
   },
 } as const satisfies FlagSet;
