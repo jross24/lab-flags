@@ -72,11 +72,27 @@ The IDs are not secret. No template contains an account ID, and a test checks it
 
 To turn a flag on, change its value in `test` first. Release it, check the result, and then change `staging` and `production`.
 
+## Turn a flag off fast
+
+Use this path when a feature misbehaves. The flag file changes. The service does not change.
+
+1. Set the value of the flag to `false` in `lib/flags.ts` for the stage that misbehaves. For an incident in Production, set `production`.
+2. Open a pull request with a title that starts with `fix:`. Merge it when every check passes.
+3. Approve the Production gate.
+
+The change takes the same path as any release of this repository. No service builds or deploys. The release that turned `show-discounts` on took 9 minutes 38 seconds from the merge to the end of `deploy-production`. Plan for about 10 minutes, plus about 30 seconds for the cache of catalogue.
+
 ## Remove a flag
 
-1. Delete the entry from `lib/flags.ts`. Remove the code in the services and in the end-to-end tests that reads the flag first. The suite fails when the state parameter of a flag it tests is missing.
-2. Run `npm test`.
-3. Open a pull request. The next release deploys the smaller flag file.
+Remove a flag when the feature is permanent. Do the steps in this order, so no service reads a flag that does not exist.
+
+1. Delete the flag from the code of the services and from the end-to-end tests. The code keeps the behaviour of the flag in its on state.
+2. Release the services, through Production.
+3. Delete the entry from `lib/flags.ts`. The suite fails when the state parameter of a flag it tests is missing, so this step must come last.
+4. Run `npm test`.
+5. Open a pull request. The next release deploys the smaller flag file.
+
+If nobody removes the flag, the `removeBy` date makes a test fail. See the next section.
 
 ## What `removeBy` is for
 
