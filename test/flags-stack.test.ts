@@ -83,8 +83,8 @@ describe.each(STAGE_NAMES)('the stack of the stage %s', (stage) => {
     });
   });
 
-  it('has the four SSM parameters of /lab/flags and no other parameter', () => {
-    template.resourceCountIs('AWS::SSM::Parameter', 4);
+  it('has the four SSM parameters of /lab/flags, one state parameter for each flag, and no other parameter', () => {
+    template.resourceCountIs('AWS::SSM::Parameter', 4 + Object.keys(FLAGS).length);
     const names = Object.values(template.findResources('AWS::SSM::Parameter')).map(
       (resource) => (resource.Properties as { Name: string }).Name,
     );
@@ -92,8 +92,30 @@ describe.each(STAGE_NAMES)('the stack of the stage %s', (stage) => {
       '/lab/flags/application-id',
       '/lab/flags/environment-id',
       '/lab/flags/profile-id',
+      '/lab/flags/state/show-discounts',
       '/lab/flags/version',
     ]);
+  });
+
+  it('writes the declared state of each flag for this stage to /lab/flags/state/<flag-name>', () => {
+    for (const [name, flag] of Object.entries(FLAGS)) {
+      template.hasResourceProperties('AWS::SSM::Parameter', {
+        Name: `/lab/flags/state/${name}`,
+        Type: 'String',
+        Value: flag.values[STAGES[stage].flagSet] ? 'on' : 'off',
+      });
+    }
+  });
+
+  it('keeps the state of show-discounts off', () => {
+    template.hasResourceProperties('AWS::SSM::Parameter', { Name: '/lab/flags/state/show-discounts', Value: 'off' });
+  });
+
+  it('writes the state only after the deployment is complete, like the version', () => {
+    template.hasResource('AWS::SSM::Parameter', {
+      Properties: { Name: '/lab/flags/state/show-discounts' },
+      DependsOn: [Match.stringLikeRegexp('^Deployment')],
+    });
   });
 
   it('writes the version to /lab/flags/version only after the deployment is complete', () => {
@@ -194,4 +216,34 @@ describe('a change of the flags', () => {
       JSON.stringify(templateFor('Production', undefined, version).findResources('AWS::AppConfig::HostedConfigurationVersion'));
     expect(content('1.2.4')).toBe(content('1.2.3'));
   });
+
+  it('changes the state parameter of the stage that changes, and of no other stage', () => {
+    const state = (template: Template): string =>
+      (
+        Object.values(template.findResources('AWS::SSM::Parameter')).find(
+          (resource) => (resource.Properties as { Name: string }).Name === '/lab/flags/state/show-discounts',
+        )?.Properties as { Value: string }
+      ).Value;
+    expect(state(templateFor('Test', CHANGED))).toBe('on');
+    expect(state(templateFor('Staging', CHANGED))).toBe('off');
+    expect(state(templateFor('Production', CHANGED))).toBe('off');
+  });
+
+  it('writes one state parameter for each flag of another flag set', () => {
+    const TWO: FlagSet = {
+      ...FLAGS,
+      'second-flag': { ...FLAGS['show-discounts'], values: { test: true, staging: true, production: false } },
+    };
+    const names = (stage: StageName): Record<string, string> =>
+      Object.fromEntries(
+        Object.values(templateFor(stage, TWO).findResources('AWS::SSM::Parameter'))
+          .map((resource) => resource.Properties as { Name: string; Value: string })
+          .filter((properties) => properties.Name.startsWith('/lab/flags/state/'))
+          .map((properties) => [properties.Name, properties.Value]),
+      );
+    expect(names('Test')).toEqual({ '/lab/flags/state/show-discounts': 'off', '/lab/flags/state/second-flag': 'on' });
+    expect(names('Staging')).toEqual({ '/lab/flags/state/show-discounts': 'off', '/lab/flags/state/second-flag': 'on' });
+    expect(names('Production')).toEqual({ '/lab/flags/state/show-discounts': 'off', '/lab/flags/state/second-flag': 'off' });
+  });
 });
+

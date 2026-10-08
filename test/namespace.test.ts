@@ -62,6 +62,8 @@ describe('namesFor', () => {
     const names = namesFor('abcdefghijklmnopqrst');
     expect(names.stackName.length).toBeLessThanOrEqual(128);
     expect(`${names.parameterPrefix}/environment-id`.length).toBeLessThanOrEqual(1011);
+    // The flag key has at most 64 characters, and "/state/" has 7.
+    expect(`${names.parameterPrefix}/state/${'a'.repeat(64)}`.length).toBeLessThanOrEqual(1011);
   });
 });
 
@@ -82,11 +84,12 @@ describe('the app with dev=true and a namespace', () => {
     template.hasResourceProperties('AWS::AppConfig::DeploymentStrategy', { Name: 'lab-flags-my-test' });
   });
 
-  it('writes the four parameters to /lab/ns/<namespace>/flags/ and to no other parameter', () => {
+  it('writes the four parameters and the state parameter to /lab/ns/<namespace>/flags/ and to no other parameter', () => {
     expect(parameterNames(stack)).toEqual([
       '/lab/ns/my-test/flags/application-id',
       '/lab/ns/my-test/flags/environment-id',
       '/lab/ns/my-test/flags/profile-id',
+      '/lab/ns/my-test/flags/state/show-discounts',
       '/lab/ns/my-test/flags/version',
     ]);
   });
@@ -117,7 +120,7 @@ describe('two namespaces in one account', () => {
     const two = devStack({ namespace: 'two' });
     expect(one.stackName).not.toBe(two.stackName);
     const names = new Set([...parameterNames(one), ...parameterNames(two)]);
-    expect(names.size).toBe(8);
+    expect(names.size).toBe(10);
   });
 });
 
@@ -146,6 +149,7 @@ describe('the copy without a namespace (the baseline)', () => {
       '/lab/flags/application-id',
       '/lab/flags/environment-id',
       '/lab/flags/profile-id',
+      '/lab/flags/state/show-discounts',
       '/lab/flags/version',
     ]);
     expect(stack.tags[NAMESPACE_TAG]).toBeUndefined();
