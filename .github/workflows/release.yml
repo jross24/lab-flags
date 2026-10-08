@@ -1,0 +1,18 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+# No concurrency group for the whole run. The release workflow orders the jobs of each environment by itself.
+
+permissions:
+  contents: write # the version tag and the GitHub release
+  id-token: write # the OIDC login to AWS
+  actions: write # a newer release cancels an older release that waits for the production reviewer
+
+jobs:
+  release:
+    uses: jross24/lab-workflows/.github/workflows/release.yml@main
+    # The deploy jobs read the secret AWS_ACCOUNT_ID of their GitHub environment.
+    secrets: inherit
