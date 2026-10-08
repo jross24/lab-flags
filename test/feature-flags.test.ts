@@ -3,6 +3,7 @@ import {
   STAGE_NAMES,
   assertNoExpiredFlags,
   buildFeatureFlagContent,
+  buildFlagStates,
   findContentProblems,
   findExpiredFlags,
   findFlagProblems,
@@ -66,6 +67,32 @@ describe('buildFeatureFlagContent', () => {
     expect(JSON.stringify(buildFeatureFlagContent(FIXTURE, 'staging'))).toBe(
       JSON.stringify(buildFeatureFlagContent(FIXTURE, 'staging')),
     );
+  });
+});
+
+describe('buildFlagStates', () => {
+  it('gives on for a flag that is true in the stage and off for a flag that is false', () => {
+    expect(buildFlagStates(FIXTURE, 'test')).toEqual({ 'alpha-flag': 'on', beta_flag: 'off' });
+    expect(buildFlagStates(FIXTURE, 'staging')).toEqual({ 'alpha-flag': 'off', beta_flag: 'off' });
+    expect(buildFlagStates(FIXTURE, 'production')).toEqual({ 'alpha-flag': 'off', beta_flag: 'on' });
+  });
+
+  it('has one entry for each flag, in the order of the flag file', () => {
+    expect(Object.keys(buildFlagStates(FIXTURE, 'test'))).toEqual(['alpha-flag', 'beta_flag']);
+  });
+
+  it('follows the same value as the AppConfig content, so the two cannot disagree', () => {
+    for (const stage of STAGE_NAMES) {
+      const content = buildFeatureFlagContent(FIXTURE, stage);
+      const states = buildFlagStates(FIXTURE, stage);
+      for (const key of Object.keys(FIXTURE)) {
+        expect(states[key], `${key} in ${stage}`).toBe(content.values[key]?.enabled === true ? 'on' : 'off');
+      }
+    }
+  });
+
+  it('gives off for the real flag show-discounts in every stage while the flag file has it off', () => {
+    for (const stage of STAGE_NAMES) expect(buildFlagStates(FLAGS, stage)['show-discounts']).toBe(FLAGS['show-discounts'].values[stage] ? 'on' : 'off');
   });
 });
 

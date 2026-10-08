@@ -23,7 +23,7 @@ export interface FlagsNames {
   // The AppConfig application and the deployment strategy. AppConfig does not need unique names, but a person reads them in the console.
   readonly applicationName: string;
   readonly strategyName: string;
-  // The SSM parameters are <prefix>/application-id, /environment-id, /profile-id and /version. The services read them.
+  // The SSM parameters are <prefix>/application-id, /environment-id, /profile-id, /version and /state/<flag-name>. The services and the tests read them.
   readonly parameterPrefix: string;
 }
 

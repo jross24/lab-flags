@@ -2,7 +2,7 @@
 
 This repository holds the feature flags of the lab. The flags are code. You change them in a pull request, and the shared pipeline releases them.
 
-The repository has no web endpoint and no Lambda function. It has one AWS CDK app that makes an AppConfig application, the flag values for each stage and four SSM parameters.
+The repository has no web endpoint and no Lambda function. It has one AWS CDK app that makes an AppConfig application, the flag values for each stage, four fixed SSM parameters and one SSM parameter for each flag.
 
 ## Why a flag change uses the same pipeline as code
 
@@ -38,7 +38,7 @@ A new flag text makes a new hosted version. A new hosted version makes a new dep
 
 Test and Staging deploy all at once. Production deploys in steps: 50 percent of the clients first, 100 percent after 2 minutes, then 1 minute of bake time.
 
-The stack writes four SSM parameters. A service reads the first three to find the flags with the AppConfig data API. The pipeline reads the fourth.
+The stack writes four fixed SSM parameters and one state parameter for each flag. A service reads the first three to find the flags with the AppConfig data API. The pipeline reads the version. The end-to-end suite reads the state parameters.
 
 | Parameter | Value |
 | --- | --- |
@@ -46,8 +46,11 @@ The stack writes four SSM parameters. A service reads the first three to find th
 | `/lab/flags/environment-id` | The AppConfig environment ID of the stage. |
 | `/lab/flags/profile-id` | The configuration profile ID. |
 | `/lab/flags/version` | The version of lab-flags that runs in the stage. |
+| `/lab/flags/state/<flag-name>` | The declared state of the flag in the stage: `on` or `off`. |
 
-The version parameter depends on the deployment. It shows the new version only after the flags are live. The stack also has the output `Version`, which the deploy job reads.
+The version parameter and the state parameters depend on the deployment. They show the new version and the new states only after the flags are live. The stack also has the output `Version`, which the deploy job reads.
+
+The state parameter is the declared state. The code builds it from the same value in `lib/flags.ts` that it puts in the AppConfig content, so the two cannot differ. The end-to-end suite of `lab-e2e` reads `/lab/flags/state/<flag-name>` in the stage it tests. It checks that the product shows the declared state. In Test it also checks the opposite state through the override header.
 
 The IDs are not secret. No template contains an account ID, and a test checks it.
 
@@ -65,13 +68,13 @@ The IDs are not secret. No template contains an account ID, and a test checks it
 1. Change the value for one stage in `lib/flags.ts`. Change `production` last, in its own pull request.
 2. Run `npm test`.
 3. Open a pull request. Use `feat:` for a new flag and `fix:` for a value change.
-4. Read the `cdk diff` comment. It must show only the hosted version, the deployment and the version parameter.
+4. Read the `cdk diff` comment. It must show only the hosted version, the deployment, the version parameter and the state parameter of the flag.
 
 To turn a flag on, change its value in `test` first. Release it, check the result, and then change `staging` and `production`.
 
 ## Remove a flag
 
-1. Delete the entry from `lib/flags.ts`. Remove the code in the services that reads the flag first.
+1. Delete the entry from `lib/flags.ts`. Remove the code in the services and in the end-to-end tests that reads the flag first. The suite fails when the state parameter of a flag it tests is missing.
 2. Run `npm test`.
 3. Open a pull request. The next release deploys the smaller flag file.
 

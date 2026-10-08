@@ -9,7 +9,7 @@ import {
 } from 'aws-cdk-lib/aws-appconfig';
 import { StringParameter } from 'aws-cdk-lib/aws-ssm';
 import type { Construct } from 'constructs';
-import { buildFeatureFlagContent } from './feature-flags.ts';
+import { buildFeatureFlagContent, buildFlagStates } from './feature-flags.ts';
 import type { FlagSet } from './feature-flags.ts';
 import { FLAGS } from './flags.ts';
 import { NAMESPACE_TAG, namesFor } from './namespace.ts';
@@ -33,7 +33,8 @@ export class FlagsStack extends Stack {
 
     if (props.namespace !== undefined) Tags.of(this).add(NAMESPACE_TAG, props.namespace);
 
-    const content = buildFeatureFlagContent(props.flags ?? FLAGS, props.config.flagSet);
+    const flags = props.flags ?? FLAGS;
+    const content = buildFeatureFlagContent(flags, props.config.flagSet);
 
     const application = new CfnApplication(this, 'Application', {
       name: names.applicationName,
@@ -102,6 +103,18 @@ export class FlagsStack extends Stack {
       stringValue: props.version,
     });
     versionParameter.node.addDependency(deployment);
+
+    // One parameter for each flag holds its declared state in this stage: "on" or "off". The end-to-end suite reads
+    // /lab/flags/state/<flag-name> and checks that the product shows this state. Like the version, a state parameter
+    // changes only after the deployment is complete, so a suite that runs after the stage deploy sees the live state.
+    for (const [flagName, state] of Object.entries(buildFlagStates(flags, props.config.flagSet))) {
+      const stateParameter = new StringParameter(this, `StateParameter-${flagName}`, {
+        parameterName: `${names.parameterPrefix}/state/${flagName}`,
+        description: `Declared state of the flag ${flagName} in this stage (on or off)`,
+        stringValue: state,
+      });
+      stateParameter.node.addDependency(deployment);
+    }
 
     // The pipeline reads Version after a deployment. The deploy job prints the outputs to a public log,
     // so no output may contain the account ID. The IDs of AppConfig do not.

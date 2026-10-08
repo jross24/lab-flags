@@ -48,6 +48,16 @@ export function buildFeatureFlagContent(flags: FlagSet, stage: FlagStageName): F
   return content;
 }
 
+// The declared state of each flag in one stage, as the word "on" or "off". The stack writes it to the SSM parameter
+// /lab/flags/state/<flag-name>. The end-to-end suite reads it and checks that the product shows the same state.
+export type FlagState = 'on' | 'off';
+
+export function buildFlagStates(flags: FlagSet, stage: FlagStageName): Record<string, FlagState> {
+  const states: Record<string, FlagState> = {};
+  for (const [key, flag] of Object.entries(flags)) states[key] = flag.values[stage] ? 'on' : 'off';
+  return states;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
